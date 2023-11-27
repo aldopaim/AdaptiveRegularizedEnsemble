@@ -58,8 +58,13 @@ CapabilitiesHandler {
 			"Should use drift detection?");
 
 	public IntOption windowObservationSize  = new IntOption("windowObservationSize", 'w',
-            "Size of the observation window to refine statistics and select learners in the voting.", 500, 0, Integer.MAX_VALUE);
+            "Size of the observation window to refine statistics and select learners in the voting.", 1000, 0, Integer.MAX_VALUE);
 	
+	public IntOption numberRejections  = new IntOption("numberRejections", 'r',
+            "maximum number of rejections (0 = do not use number of rejections).", 5, 0, Integer.MAX_VALUE);
+	
+	public IntOption seedSizeSubspace  = new IntOption("seedSizeSubspace", 'e',
+            "Random seed used in the random subspace size.", 1, 0, Integer.MAX_VALUE);
 		
 	protected static final int SINGLE_THREAD = 0;
 
@@ -111,8 +116,7 @@ CapabilitiesHandler {
 		Collection<TrainingRunnable> trainers = new ArrayList<TrainingRunnable>();
 		for (int i = 0 ; i < this.ensemble.length ; i++) {
 			
-			long seed = Double.toString(instancesSeen).hashCode()+i;
-            this.ensemble[i].setSeedRandom(seed);
+			this.ensemble[i].setSeedRandom(this.seedSizeSubspace.getValue());
 
 			DoubleVector vote = new DoubleVector(this.ensemble[i].getVotesForInstance(instance));
 			
@@ -128,7 +132,7 @@ CapabilitiesHandler {
             //hit
             if (!willTrain) {
             	this.ensemble[i].UntrainedClasses[trueClass]++;
-            	if (this.ensemble[i].UntrainedClasses[trueClass] >= 5) {
+            	if (this.ensemble[i].UntrainedClasses[trueClass] >= this.numberRejections.getValue() && this.numberRejections.getValue() > 0) {
             		this.ensemble[i].UntrainedClasses[trueClass] = 0;
             		willTrain = true;
             	}
@@ -152,16 +156,12 @@ CapabilitiesHandler {
             this.ensemble[i].updateMatrixConfusion(trueClass == predictedClass, 1);
 			accWindowLearner += this.ensemble[i].accuracyWindowLearner;
 			sumOfSquares += (this.ensemble[i].accuracyWindowLearner * this.ensemble[i].accuracyWindowLearner);
+			
 		}
 		
 		
-		if (accWindowLearner > 0.0) {
+		if (accWindowLearner > 0.0) 
 			avgAccuracyWindowLearner = (accWindowLearner / this.ensemble.length);
-
-			double aux = ((accWindowLearner*accWindowLearner)/this.ensemble.length);
-			double stDev = Math.sqrt( (sumOfSquares - aux ) / (this.ensemble.length-1)  );
-			avgAccuracyWindowLearner = avgAccuracyWindowLearner - stDev;
-		}
 		
 		
 		if(this.executor != null) {
@@ -181,8 +181,10 @@ CapabilitiesHandler {
 			initEnsemble(testInstance);
 		DoubleVector combinedVote = new DoubleVector();
 		for(int i = 0 ; i < this.ensemble.length ; ++i) {
-			boolean shouldClassifierVote = (this.ensemble[i].accuracyWindowLearner >= avgAccuracyWindowLearner);
-			//boolean shouldClassifierVote = true;
+			boolean shouldClassifierVote = true;
+			if (this.windowObservationSize.getValue() > 0)
+				shouldClassifierVote = (this.ensemble[i].accuracyWindowLearner >= avgAccuracyWindowLearner);
+			
 			if (shouldClassifierVote) {
 				DoubleVector vote = new DoubleVector(this.ensemble[i].getVotesForInstance(testInstance));
 				
@@ -207,8 +209,38 @@ CapabilitiesHandler {
 
 	@Override
 	protected Measurement[] getModelMeasurementsImpl() {
-		return null;
+		cleanThreads();
+		 
+		 double sum = 0;
+		 for(int i = 0 ; i < this.ensemble.length ; ++i) {
+			 sum += this.ensemble[i].countInstanceTrain;			 
+		 }
+		 //System.out.println("Media="+sum/this.ensemble.length);
+		 double media = sum/this.ensemble.length;
+		 System.out.println("Media="+media);
+		 return new Measurement[]{
+                new Measurement(
+               		 "Avg. of instances for training",
+                media)};
+		//return null;
 	}
+	
+	@Override
+	 public Measurement[] getModelMeasurements() {
+		 Measurement[] measurements = super.getModelMeasurements();
+		 cleanThreads();
+		 return measurements;
+	 }
+
+	 public void cleanThreads() {
+		 // tries to solve the hanging threads issue
+		 
+		 if(this.executor != null) {
+			 this.executor.shutdownNow();
+			 this.executor = null;
+		 }
+		 
+	 }
 
 	protected void initEnsemble(Instance instance) {
 		// Init the ensemble.
@@ -218,7 +250,7 @@ CapabilitiesHandler {
 		int n = instance.numAttributes()-1; // Ignore class label ( -1 )
 		
 		this.subspaceRandom = new Random();
-		this.subspaceRandom.setSeed(n+instance.numClasses());
+		this.subspaceRandom.setSeed(this.seedSizeSubspace.getValue());
 		this.minValueRandom = 2; 
 		this.maxValueRandom = n;
 		
@@ -290,8 +322,6 @@ CapabilitiesHandler {
 		protected int numberOfDriftsDetected;
 		protected int numberOfWarningsDetected;
 		
-		//
-		 //protected int windowObservationSize = 400;
 		 protected int windowObservationSize;
 		 protected double accuracyWindowLearner; 
 
@@ -300,6 +330,8 @@ CapabilitiesHandler {
 		 protected Random subspaceRandomBaseLearner;
 		 
 		 protected long[] UntrainedClasses;
+		 
+		 protected int countInstanceTrain;
 
 		private void init(int indexOriginal, 
 				ARFHoeffdingTree instantiatedClassifier, 
@@ -317,6 +349,7 @@ CapabilitiesHandler {
 
 			this.numberOfDriftsDetected = 0;
 			this.numberOfWarningsDetected = 0;
+			this.countInstanceTrain = 0;
 
 			if(this.useDriftDetector) {
 				this.driftOption = driftOption;
@@ -347,7 +380,8 @@ CapabilitiesHandler {
 			this.driftDetectionMethod = ((ChangeDetector) getPreparedClassOption(this.driftOption)).copy();
 			
 			accClassifierArray = null;
-            this.classifier.subspaceSizeOption.setValue(randomSubSpaceSizeLocal());
+			this.classifier.subspaceSizeOption.setValue(randomSubSpaceSizeLocal(this.classifier.subspaceSizeOption.getValue()));
+            
 		}
 		
 		public void setSeedRandom(long seed) {
@@ -356,9 +390,16 @@ CapabilitiesHandler {
 			this.subspaceRandomBaseLearner.setSeed(seed);
 		}
 
-		private int randomSubSpaceSizeLocal() {
-			int randomSubSpaceSize = this.subspaceRandomBaseLearner.nextInt(maxValueRandom + 1 - minValueRandom) + minValueRandom;
-			return randomSubSpaceSize;
+		private int randomSubSpaceSizeLocal(int block) {
+			
+			//int randomSubSpaceSize = this.subspaceRandomBaseLearner.nextInt(maxValueRandom + 1 - minValueRandom) + minValueRandom;
+			//return randomSubSpaceSize;
+			int randomSubSpaceSize;
+		    do {
+		    	randomSubSpaceSize = this.subspaceRandomBaseLearner.nextInt((maxValueRandom - minValueRandom) + 1) + minValueRandom;
+		    } while (randomSubSpaceSize == block && (maxValueRandom != block && block != minValueRandom));
+		    return randomSubSpaceSize;
+			
 		}
 	        
 
@@ -366,7 +407,7 @@ CapabilitiesHandler {
 			Instance weightedInstance = instance.copy();
 			weightedInstance.setWeight(instance.weight() * weight);
 			this.classifier.trainOnInstance(weightedInstance);
-
+			this.countInstanceTrain++;
 
 			boolean correctlyClassifies = this.classifier.correctlyClassifies(instance);
 
@@ -386,6 +427,9 @@ CapabilitiesHandler {
 		private void updateMatrixConfusion(boolean correctlyClassifies, double weight) {
         	double acc = 0.0;
             
+        	if (this.windowObservationSize <= 0)
+        		return;
+        	
             if (accClassifierArray == null) {
             	accClassifierArray = new int[this.windowObservationSize+2];
             	lastIndex = -1;
