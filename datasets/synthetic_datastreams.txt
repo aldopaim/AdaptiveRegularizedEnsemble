@@ -18,7 +18,7 @@ The following are all the configurations of the synthetic data streams used in t
 -i 500000 -f 500000 -s (ConceptDriftStream -s (generators.MixedGenerator -b) -d (ConceptDriftStream -s (generators.MixedGenerator -f 2 -b) -d (ConceptDriftStream -s (generators.MixedGenerator -b) -d (generators.MixedGenerator -f 2 -b) -p 125000 -w 50) -p 125000 -w 50) -p 125000 -w 50) 
 
 #MIXED_IMBALANCED - Abrupt
--i 500000 -f 500000 -s (ConceptDriftStream -s generators.MixedGenerator -d (ConceptDriftStream -s (generators.MixedGenerator -f 2) -d (ConceptDriftStream -s generators.MixedGenerator -d (generators.MixedGenerator -f 2) -p 125000 -w 50) -p 125000 -w 50) -p 125000 -w 50) 
+-i 500000 -f 500000 -s (ConceptDriftStream -s generators.MixedGenerator -d (ConceptDriftStream -s generators.MixedGenerator -d (ConceptDriftStream -s generators.MixedGenerator -d generators.MixedGenerator -p 125000 -w 50) -p 125000 -w 50) -p 125000 -w 50)
 
 #RBF_m
 -i 500000 -f 500000 -s (generators.RandomRBFGeneratorDrift -c 5 -s .0001) 
