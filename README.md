@@ -1,7 +1,7 @@
 # Adaptive Regularized Rnsemble for Evolving Data Stream Classification
 This is the repository for the Adaptive Regularized Ensemble (ARE) algorithm. 
 
-Abstract
+### Abstract
 Extracting knowledge from data streams requires fast incremental algorithms that are able to handle unlimited
 processing and ever-changing data with finite memory. A strategy for this challenge is the use of ensembles
 owing to their ability to tackle concept drift and achieve highly accurate predictions. However, ensembles
@@ -19,7 +19,7 @@ The datasets and synthetic data streams are available in the `\dataset` director
 ## Using ARTE
 Download the pre-compiled JAR files and run:
 ```
-java -javaagent:sizeofag-1.0.4.jar -cp moa-custom-ARTE-2.0.jar moa.DoTask "EvaluatePrequential -l moa.classifiers.meta.AdaptiveRegularizedEnsemble -s generators.AgrawalGenerator -i 1000000 -f 10000"
+java -javaagent:sizeofag-1.0.4.jar -cp moa-custom-ARE-1.0.jar moa.DoTask "EvaluatePrequential -l moa.classifiers.meta.AdaptiveRegularizedEnsemble -s generators.AgrawalGenerator -i 1000000 -f 10000"
 ```
 Alternatively, import the project source code directly into [MOA](https://github.com/Waikato/moa).
 
